@@ -1,0 +1,37 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="roundedSquare">
+      <rect x="0" y="0" width="512" height="512" rx="128" ry="128"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#roundedSquare)">
+    <rect x="0" y="0" width="512" height="512" fill="#2FC7A8"/>
+    <circle cx="90" cy="90" r="70" fill="#3DD4B4" opacity="0.55"/>
+    <circle cx="440" cy="440" r="110" fill="#22B396" opacity="0.55"/>
+
+    <circle cx="410" cy="96" r="14" fill="#FFC94D"/>
+    <circle cx="450" cy="150" r="7" fill="#FFC94D"/>
+    <circle cx="70" cy="410" r="9" fill="#FFFFFF" opacity="0.6"/>
+
+    <path d="M 66 300
+             L 156 300
+             L 182 210
+             L 224 380
+             L 254 300
+             L 300 300"
+          fill="none" stroke="#FFFFFF" stroke-width="20"
+          stroke-linecap="round" stroke-linejoin="round"/>
+
+    <g transform="translate(300,300)">
+      <path d="M0 -36
+               C -32 -68, -80 -42, -80 -2
+               C -80 36, -36 64, 0 98
+               C 36 64, 80 36, 80 -2
+               C 80 -42, 32 -68, 0 -36 Z"
+            fill="#FF6F5E"/>
+    </g>
+
+    <circle cx="66" cy="300" r="12" fill="#FFFFFF"/>
+  </g>
+</svg>
