@@ -182,18 +182,25 @@
     overflow:hidden;
   }
   .track-header{
-    width:100%;
+    display:flex;
+    align-items:center;
+    gap:4px;
+  }
+  .track-toggle{
+    flex:1;
     display:flex;
     align-items:center;
     gap:12px;
     background:none;
     border:none;
     margin:0;
-    padding:14px 16px 14px 14px;
+    padding:14px 8px 14px 14px;
     cursor:pointer;
     font:inherit;
     color:inherit;
+    text-align:left;
     -webkit-tap-highlight-color: transparent;
+    min-width:0;
   }
   .track .icon-dot{
     width:40px; height:40px;
@@ -208,7 +215,7 @@
     font-size:14px;
     margin:0;
     flex:1;
-    text-align:left;
+    min-width:0;
   }
   .chevron{
     display:flex;
@@ -219,6 +226,20 @@
     transition:transform .25s ease;
   }
   .track.open .chevron{ transform:rotate(180deg); }
+  .track-edit{
+    width:34px; height:34px;
+    min-width:34px;
+    margin-right:10px;
+    border-radius:50%;
+    border:none;
+    background:rgba(46,42,69,0.08);
+    color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .track-edit svg{ width:15px; height:15px; }
+  .track-edit:active{ transform:scale(0.92); }
   .track-body{
     overflow:hidden;
     max-height:0;
@@ -254,6 +275,68 @@
   .t-care{ background:var(--mint-bg); }
   .t-care .icon-dot{ background:var(--mint); }
 
+  .edit-textarea{
+    width:100%;
+    min-height:110px;
+    border-radius:12px;
+    border:1.5px solid rgba(46,42,69,0.15);
+    padding:10px 12px;
+    font-family:'Noto Sans JP', sans-serif;
+    font-size:13.5px;
+    line-height:1.6;
+    color:var(--ink);
+    background:#fff;
+    resize:vertical;
+  }
+  .edit-textarea:focus{
+    outline:none;
+    border-color:var(--ink);
+  }
+  .edit-hint{
+    font-size:11px;
+    color:var(--ink-soft);
+    margin:6px 0 0;
+  }
+  .edit-actions{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+  }
+  .btn-save{
+    font-family:'Zen Maru Gothic', sans-serif;
+    font-weight:700;
+    font-size:13px;
+    color:#fff;
+    background:var(--ink);
+    border:none;
+    border-radius:999px;
+    padding:9px 18px;
+    cursor:pointer;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-save:active{ transform:translateY(1px); box-shadow:none; }
+  .btn-cancel{
+    font-family:'Noto Sans JP', sans-serif;
+    font-weight:700;
+    font-size:13px;
+    color:var(--ink-soft);
+    background:none;
+    border:none;
+    padding:9px 12px;
+    cursor:pointer;
+  }
+
+  .reset-link{
+    background:none;
+    border:none;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    text-decoration:underline;
+    cursor:pointer;
+    padding:4px;
+    font-family:'Noto Sans JP', sans-serif;
+  }
+
   footer{
     margin-top:26px;
     text-align:center;
@@ -278,7 +361,10 @@
     <div class="placeholder">↑ 項目を選択してください</div>
   </div>
 
-  <footer>助産学スタディノート／臨床での最終判断は必ず医師・指導者と確認してください</footer>
+  <footer>
+    助産学スタディノート／臨床での最終判断は必ず医師・指導者と確認してください<br>
+    <button type="button" id="reset-edits" class="reset-link">編集内容をすべて初期状態に戻す</button>
+  </footer>
 </div>
 
 <script>
@@ -374,40 +460,103 @@ const palColor = {
   yellow:"var(--yellow)", violet:"var(--violet)", pink:"var(--pink)"
 };
 
+const STORAGE_KEY = "labor-assessment-edits-v1";
+const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+const PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>';
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function loadLiveData(){
+  let base = DATA.map(d => JSON.parse(JSON.stringify(d)));
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ saved = null; }
+  if(saved && typeof saved === 'object'){
+    base.forEach(item => {
+      const ov = saved[item.key];
+      if(ov){
+        TRACKS.forEach(t => {
+          if(Array.isArray(ov[t.key])) item[t.key] = ov[t.key];
+        });
+      }
+    });
+  }
+  return base;
+}
+
+function saveOverride(key, trackKey, values){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ saved = null; }
+  if(!saved || typeof saved !== 'object') saved = {};
+  if(!saved[key]) saved[key] = {};
+  saved[key][trackKey] = values;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+}
+
+let liveData = loadLiveData();
+let currentKey = liveData[0].key;
+let openTracks = new Set();
+let editingTrack = null;
+
 const selector = document.getElementById('selector');
 const holder = document.getElementById('panel-holder');
 
-DATA.forEach((item, i) => {
+liveData.forEach((item, i) => {
   const btn = document.createElement('button');
   const col = PALETTE[i % PALETTE.length];
   btn.className = 'tab';
   btn.dataset.key = item.key;
   btn.innerHTML = `<span class="icon-dot" style="background:${palColor[col]}">${i+1}</span><span>${item.title}</span>`;
-  btn.addEventListener('click', () => selectItem(item.key, true));
+  btn.addEventListener('click', () => {
+    currentKey = item.key;
+    openTracks.clear();
+    editingTrack = null;
+    renderPanel(true);
+  });
   selector.appendChild(btn);
 });
 
-const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-
-function selectItem(key, shouldScroll){
-  const item = DATA.find(d => d.key === key);
+function renderPanel(shouldScroll){
+  const item = liveData.find(d => d.key === currentKey);
   if(!item) return;
 
   document.querySelectorAll('.tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.key === key);
+    t.classList.toggle('active', t.dataset.key === currentKey);
   });
 
-  let tracksHtml = TRACKS.map(t => {
-    const lis = item[t.key].map(li => `<li>${li}</li>`).join('');
+  const tracksHtml = TRACKS.map(t => {
+    const isOpen = openTracks.has(t.key);
+    const isEditing = editingTrack === t.key;
+    let bodyInner;
+    if(isEditing){
+      bodyInner = `
+        <textarea class="edit-textarea" data-track="${t.key}"></textarea>
+        <p class="edit-hint">1行に1項目ずつ入力してください</p>
+        <div class="edit-actions">
+          <button type="button" class="btn-save" data-track="${t.key}">登録する</button>
+          <button type="button" class="btn-cancel" data-track="${t.key}">キャンセル</button>
+        </div>
+      `;
+    } else {
+      const lis = item[t.key].map(li => `<li>${escapeHtml(li)}</li>`).join('');
+      bodyInner = `<ul>${lis}</ul>`;
+    }
     return `
-      <div class="track ${t.cls}">
-        <button class="track-header" type="button">
-          <span class="icon-dot">${t.icon}</span>
-          <span class="track-title">${t.label}</span>
-          <span class="chevron">${CHEVRON}</span>
-        </button>
+      <div class="track ${t.cls}${(isOpen||isEditing) ? ' open' : ''}">
+        <div class="track-header">
+          <button type="button" class="track-toggle" data-track="${t.key}">
+            <span class="icon-dot">${t.icon}</span>
+            <span class="track-title">${t.label}</span>
+            <span class="chevron">${CHEVRON}</span>
+          </button>
+          <button type="button" class="track-edit" data-track="${t.key}" aria-label="編集" title="編集" style="${isEditing ? 'display:none;' : ''}">${PENCIL}</button>
+        </div>
         <div class="track-body">
-          <div class="track-body-inner"><ul>${lis}</ul></div>
+          <div class="track-body-inner">${bodyInner}</div>
         </div>
       </div>
     `;
@@ -423,18 +572,57 @@ function selectItem(key, shouldScroll){
     </div>
   `;
 
-  holder.querySelectorAll('.track-header').forEach(header => {
-    header.addEventListener('click', () => {
-      const track = header.closest('.track');
-      const body = track.querySelector('.track-body');
-      const isOpen = track.classList.contains('open');
-      if(isOpen){
-        body.style.maxHeight = '0px';
-        track.classList.remove('open');
+  if(editingTrack){
+    const ta = holder.querySelector(`.edit-textarea[data-track="${editingTrack}"]`);
+    if(ta){
+      ta.value = item[editingTrack].join('\n');
+      ta.focus();
+    }
+  }
+
+  holder.querySelectorAll('.track.open .track-body').forEach(body => {
+    body.style.maxHeight = body.scrollHeight + 'px';
+  });
+
+  holder.querySelectorAll('.track-toggle').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      const key = toggle.dataset.track;
+      if(openTracks.has(key)){
+        openTracks.delete(key);
+        if(editingTrack === key) editingTrack = null;
       } else {
-        track.classList.add('open');
-        body.style.maxHeight = body.scrollHeight + 'px';
+        openTracks.add(key);
       }
+      renderPanel(false);
+    });
+  });
+
+  holder.querySelectorAll('.track-edit').forEach(editBtn => {
+    editBtn.addEventListener('click', () => {
+      const key = editBtn.dataset.track;
+      openTracks.add(key);
+      editingTrack = key;
+      renderPanel(false);
+    });
+  });
+
+  holder.querySelectorAll('.btn-save').forEach(saveBtn => {
+    saveBtn.addEventListener('click', () => {
+      const key = saveBtn.dataset.track;
+      const ta = holder.querySelector(`.edit-textarea[data-track="${key}"]`);
+      const values = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+      if(values.length === 0) values.push("（未入力）");
+      item[key] = values;
+      saveOverride(item.key, key, values);
+      editingTrack = null;
+      renderPanel(false);
+    });
+  });
+
+  holder.querySelectorAll('.btn-cancel').forEach(cancelBtn => {
+    cancelBtn.addEventListener('click', () => {
+      editingTrack = null;
+      renderPanel(false);
     });
   });
 
@@ -448,7 +636,17 @@ function selectItem(key, shouldScroll){
   }
 }
 
-selectItem(DATA[0].key, false);
+document.getElementById('reset-edits').addEventListener('click', () => {
+  if(confirm('編集した内容をすべて削除して初期状態に戻しますか？')){
+    localStorage.removeItem(STORAGE_KEY);
+    liveData = loadLiveData();
+    openTracks.clear();
+    editingTrack = null;
+    renderPanel(false);
+  }
+});
+
+renderPanel(false);
 </script>
 </body>
 </html>
